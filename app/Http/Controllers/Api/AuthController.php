@@ -61,6 +61,7 @@ class AuthController extends Controller
         ]);
 
         // Passport Personal Access Token
+        /** @var User $user */
         $token = $user->createToken('Personal Access Token')->accessToken;
 
         return response()->json([
@@ -116,6 +117,7 @@ class AuthController extends Controller
             $user = Auth::user();
             
             // Passport Personal Access Token
+            /** @var User $user */
             $token = $user->createToken('Personal Access Token')->accessToken;
 
             return response()->json([
