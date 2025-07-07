@@ -3,9 +3,8 @@
 namespace App\Http\Resources;
 
 use Illuminate\Http\Request;
-use Illuminate\Http\Resources\Json\JsonResource;
 
-class ProductResource extends JsonResource
+class ProductResource extends CustomResource
 {
     /**
      * Transform the resource into an array.
@@ -14,18 +13,32 @@ class ProductResource extends JsonResource
      */
     public function toArray(Request $request): array
     {
+
         return [
-            'id' => $this->id,
-            'name' => $this->name,
-            'slug' => $this->slug,
-            'description' => $this->description,
-            'price' => $this->price,
-            'quantity' => $this->quantity,
-            'sku' => $this->sku,
-            'is_active' => $this->is_active,
-            'category' => new CategoryResource($this->whenLoaded('category')),
-            'created_at' => $this->created_at,
-            'updated_at' => $this->updated_at
+            ...$this->getResourceIdentifier(),
+            'name' => $this->resource->name,
+            'slug' => $this->resource->slug,
+            'description' => $this->resource->description,
+            'sku' => $this->resource->sku,
+            'quantity' => $this->resource->quantity,
+            'is_active' => $this->resource->is_active,
+
+            'price' => $this->formatCurrency($this->resource->price),
+
+            'stock_status' => [
+                'quantity' => $this->resource->quantity,
+                'is_available' => $this->resource->quantity > 0 && $this->resource->is_active,
+                'status_text' => $this->resource->quantity > 0 && $this->resource->is_active ? 'Stokta' : 'Stokta Yok',
+            ],
+
+            'category' => $this->loadRelationship('category', CategoryResource::class),            'tags' => $this->resource->tags,
+            
+            'user_data' => $this->whenAuth([
+                'is_favorited' => false, // Buraya favorileme logic'i eklenebilir
+                'user_rating' => null,   // Buraya rating logic'i eklenebilir
+            ]),
+
+            ...$this->getTimestamps(),
         ];
     }
 }

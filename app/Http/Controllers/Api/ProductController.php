@@ -7,6 +7,9 @@ use App\Services\ProductService;
 use App\Http\Resources\ProductResource;
 use Illuminate\Database\Eloquent\Casts\Json;
 use Illuminate\Http\JsonResponse;
+use App\Http\Requests\ProductStoreRequest;
+use App\Http\Requests\ProductUpdateRequest;
+use App\Models\Product;
 use Illuminate\Http\Request;
 
 class ProductController extends Controller
@@ -70,9 +73,10 @@ class ProductController extends Controller
      *     )
      * )
      */
-    public function store(Request $request)
+    public function store(ProductStoreRequest $request)
     {
-        $product = $this->productService->createRecord($request->all());
+        $validatedData = $request->validated();
+        $product = Product::create($validatedData);
         return new ProductResource($product);
     }
 
@@ -125,9 +129,10 @@ class ProductController extends Controller
      *     )
      * )
      */
-    public function update(Request $request, string $id)
+    public function update(ProductUpdateRequest $request, Product $product)
     {
-        $product = $this->productService->updateRecord($id, $request->all());
+        $validatedData = $request->validated();
+        $product->update($validatedData);
         return new ProductResource($product);
     }
 
