@@ -14,28 +14,28 @@ class CategoryResource extends CustomResource
         return [
             // Resource identifier (ID, type otomatik)
             ...$this->getResourceIdentifier(),
-            
+
             // Temel kategori bilgileri
             'name' => $this->resource->name,
             'slug' => $this->resource->slug,
             'description' => $this->resource->description,
             'is_active' => $this->resource->is_active,
-            
+
             // Kategori durumu
             'status' => [
                 'is_active' => $this->resource->is_active,
                 'status_text' => $this->resource->is_active ? 'Aktif' : 'Pasif',
                 'color_class' => $this->resource->is_active ? 'success' : 'danger'
             ],
-            
+
             // İstatistikler (eğer relation yüklenmişse)
             'statistics' => [
                 'products_count' => $this->when(
-                    isset($this->resource->products_count), 
+                    isset($this->resource->products_count),
                     $this->resource->products_count ?? 0
                 ),
                 'posts_count' => $this->when(
-                    isset($this->resource->posts_count), 
+                    isset($this->resource->posts_count),
                     $this->resource->posts_count ?? 0
                 ),
                 'total_items' => $this->when(
@@ -43,7 +43,7 @@ class CategoryResource extends CustomResource
                     ($this->resource->products_count ?? 0) + ($this->resource->posts_count ?? 0)
                 )
             ],
-            
+
             // Parent-Child ilişkileri (eğer varsa)
             'hierarchy' => $this->when(
                 isset($this->resource->parent_id) || isset($this->resource->level),
@@ -54,13 +54,13 @@ class CategoryResource extends CustomResource
                     'children_count' => $this->resource->children_count ?? 0
                 ]
             ),
-            
+
             // Parent category (eğer yüklenmişse)
             'parent' => $this->loadRelationship('parent', CategoryResource::class),
-            
+
             // Child categories (eğer yüklenmişse)
             'children' => $this->loadRelationship('children', CategoryResource::class),
-            
+
             // SEO bilgileri (eğer varsa)
             'seo' => $this->when(
                 isset($this->resource->meta_title) || isset($this->resource->meta_description),
@@ -70,21 +70,21 @@ class CategoryResource extends CustomResource
                     'canonical_url' => route('categories.show', $this->resource->slug ?? $this->resource->id)
                 ]
             ),
-            
+
             // Admin bilgileri (sadece admin için)
             'admin_data' => $this->whenAuth([
                 'sort_order' => $this->resource->sort_order ?? 0,
                 'internal_notes' => $this->resource->internal_notes ?? null,
                 'created_by' => $this->resource->created_by ?? null,
             ]),
-            
+
             // API Links
             'links' => [
                 'self' => route('api.categories.show', $this->resource->id),
                 'products' => route('api.categories.products', $this->resource->id) ?? '#',
                 'posts' => route('api.categories.posts', $this->resource->id) ?? '#'
             ],
-            
+
             // Timestamps (formatlanmış)
             ...$this->getTimestamps(),
         ];

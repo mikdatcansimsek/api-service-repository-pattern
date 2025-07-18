@@ -14,14 +14,14 @@ class UserResource extends CustomResource
         return [
             // Resource identifier (ID, type otomatik)
             ...$this->getResourceIdentifier(),
-            
+
             // Genel kullanıcı bilgileri (herkese açık)
             'name' => $this->resource->name,
             'username' => $this->resource->username ?? null,
-            
+
             // Email sadece kullanıcının kendisi görebilir
             'email' => $this->whenOwner($this->resource->email),
-            
+
             // Profil bilgileri
             'profile' => [
                 'avatar' => $this->resource->avatar_url ?? $this->getGravatarUrl(),
@@ -30,7 +30,7 @@ class UserResource extends CustomResource
                 'website' => $this->resource->website ?? null,
                 'social_links' => $this->resource->social_links ?? []
             ],
-            
+
             // Hesap durumu
             'account_status' => [
                 'is_active' => $this->resource->is_active ?? true,
@@ -41,7 +41,7 @@ class UserResource extends CustomResource
                 ),
                 'status_text' => $this->getAccountStatusText()
             ],
-            
+
             // Kullanıcı istatistikleri (eğer relation yüklenmişse)
             'statistics' => [
                 'posts_count' => $this->resource->posts_count ?? 0,
@@ -50,7 +50,7 @@ class UserResource extends CustomResource
                 'followers_count' => $this->resource->followers_count ?? 0,
                 'following_count' => $this->resource->following_count ?? 0
             ],
-            
+
             // Özel bilgiler (sadece kullanıcının kendisi görebilir)
             'private_info' => $this->whenOwner([
                 'phone' => $this->resource->phone ?? null,
@@ -62,7 +62,7 @@ class UserResource extends CustomResource
                 'preferences' => $this->resource->preferences ?? [],
                 'notification_settings' => $this->resource->notification_settings ?? []
             ]),
-            
+
             // Admin bilgileri (sadece admin görebilir)
             'admin_info' => $this->whenAuth([
                 'last_login_at' => $this->when(
@@ -77,7 +77,7 @@ class UserResource extends CustomResource
                     $this->resource->roles->pluck('name') ?? []
                 )
             ]),
-            
+
             // Son aktivite
             'activity' => [
                 'last_activity' => $this->when(
@@ -87,7 +87,7 @@ class UserResource extends CustomResource
                 'is_online' => $this->isUserOnline(),
                 'status' => $this->getUserActivityStatus()
             ],
-            
+
             // API Links
             'links' => [
                 'self' => route('api.users.show', $this->resource->id),
@@ -95,7 +95,7 @@ class UserResource extends CustomResource
                 'products' => route('api.users.products', $this->resource->id) ?? '#',
                 'public_profile' => route('users.profile', $this->resource->username ?? $this->resource->id) ?? '#'
             ],
-            
+
             // Timestamps (formatlanmış)
             ...$this->getTimestamps(),
         ];
@@ -116,14 +116,17 @@ class UserResource extends CustomResource
      */
     private function getAccountStatusText(): string
     {
-        if (!($this->resource->is_active ?? true)) {
+        $isActive = $this->resource->is_active ?? true;
+        $isVerified = !is_null($this->resource->email_verified_at ?? null);
+
+        if (!$isActive) {
             return 'Hesap Devre Dışı';
         }
-        
-        if (is_null($this->resource->email_verified_at)) {
+
+        if (!$isVerified) {
             return 'Email Doğrulanmamış';
         }
-        
+
         return 'Aktif';
     }
 
@@ -132,10 +135,10 @@ class UserResource extends CustomResource
      */
     private function isUserOnline(): bool
     {
-        if (!$this->resource->last_activity_at) {
+        if (!isset($this->resource->last_activity_at) || !$this->resource->last_activity_at) {
             return false;
         }
-        
+
         return now()->diffInMinutes($this->resource->last_activity_at) < 5;
     }
 
@@ -147,21 +150,21 @@ class UserResource extends CustomResource
         if ($this->isUserOnline()) {
             return 'online';
         }
-        
-        if (!$this->resource->last_activity_at) {
+
+        if (!isset($this->resource->last_activity_at) || !$this->resource->last_activity_at) {
             return 'never_active';
         }
-        
+
         $minutesAgo = now()->diffInMinutes($this->resource->last_activity_at);
-        
+
         if ($minutesAgo < 60) {
             return 'recently_active';
         }
-        
+
         if ($minutesAgo < 1440) { // 24 hours
             return 'today';
         }
-        
+
         return 'offline';
     }
 
@@ -173,7 +176,7 @@ class UserResource extends CustomResource
         return array_merge(parent::with($request), [
             'user_meta' => [
                 'type' => 'user',
-                'can_follow' => auth()->check() && auth()->id() !== $this->resource->id,
+                'can_follow' => $this->isAuthenticated() && $this->getAuthUserId() !== $this->resource->id,
                 'privacy_settings' => [
                     'show_email' => false,
                     'show_activity' => true,

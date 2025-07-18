@@ -14,18 +14,18 @@ class PostResource extends CustomResource
         return [
             // Resource identifier (ID, type otomatik)
             ...$this->getResourceIdentifier(),
-            
+
             // Temel post bilgileri
             'title' => $this->resource->title,
             'slug' => $this->resource->slug,
             'excerpt' => $this->resource->excerpt,
-            
+
             // İçerik (sadece yayınlanmış veya sahibi görür)
             'content' => $this->when(
                 $this->resource->is_published || $this->isOwner(),
                 $this->resource->content
             ),
-            
+
             // Yayın durumu
             'publication_status' => [
                 'is_published' => $this->resource->is_published,
@@ -36,19 +36,19 @@ class PostResource extends CustomResource
                 ),
                 'color_class' => $this->resource->is_published ? 'success' : 'warning'
             ],
-            
+
             // Yazar bilgileri
             'author' => $this->loadRelationship('user', UserResource::class),
-            
+
             // Kategori bilgileri
             'category' => $this->loadRelationship('category', CategoryResource::class),
-            
+
             // Etiketler (eğer varsa)
             'tags' => $this->when(
                 $this->resource->relationLoaded('tags'),
                 $this->resource->tags->pluck('name') ?? []
             ),
-            
+
             // İstatistikler
             'statistics' => [
                 'view_count' => $this->resource->view_count ?? 0,
@@ -57,7 +57,7 @@ class PostResource extends CustomResource
                 'share_count' => $this->resource->shares_count ?? 0,
                 'reading_time' => $this->calculateReadingTime()
             ],
-            
+
             // Medya dosyaları (eğer varsa)
             'media' => [
                 'featured_image' => $this->resource->featured_image,
@@ -73,7 +73,7 @@ class PostResource extends CustomResource
                     })
                 )
             ],
-            
+
             // SEO bilgileri
             'seo' => [
                 'meta_title' => $this->resource->meta_title ?? $this->resource->title,
@@ -82,7 +82,7 @@ class PostResource extends CustomResource
                 'canonical_url' => route('posts.show', $this->resource->slug ?? $this->resource->id),
                 'og_image' => $this->resource->featured_image ?? null
             ],
-            
+
             // Kullanıcı etkileşimleri (giriş yapmış kullanıcılar için)
             'user_interaction' => $this->whenAuth([
                 'is_liked' => $this->isLikedByUser(),
@@ -91,7 +91,7 @@ class PostResource extends CustomResource
                 'can_edit' => $this->canUserEdit(),
                 'can_delete' => $this->canUserDelete()
             ]),
-            
+
             // Yazar verileri (sadece yazarın kendisi görür)
             'author_data' => $this->whenOwner([
                 'draft_notes' => $this->resource->draft_notes,
@@ -104,7 +104,7 @@ class PostResource extends CustomResource
                     $this->formatDate($this->resource->last_edited_at)
                 )
             ]),
-            
+
             // Admin bilgileri
             'admin_data' => $this->whenAuth([
                 'is_featured' => $this->resource->is_featured ?? false,
@@ -112,13 +112,13 @@ class PostResource extends CustomResource
                 'moderation_status' => $this->resource->moderation_status ?? 'approved',
                 'admin_notes' => $this->resource->admin_notes
             ]),
-            
+
             // İlişkili postlar
             'related_posts' => $this->when(
                 $this->resource->relationLoaded('relatedPosts'),
                 PostResource::collection($this->resource->relatedPosts)->withoutMeta()
             ),
-            
+
             // API Links
             'links' => [
                 'self' => route('api.posts.show', $this->resource->id),
@@ -127,7 +127,7 @@ class PostResource extends CustomResource
                 'comments' => route('api.posts.comments', $this->resource->id) ?? '#',
                 'public_url' => route('posts.show', $this->resource->slug ?? $this->resource->id) ?? '#'
             ],
-            
+
             // Timestamps (formatlanmış)
             ...$this->getTimestamps(),
         ];
@@ -140,7 +140,7 @@ class PostResource extends CustomResource
     {
         $wordCount = str_word_count(strip_tags($this->resource->content ?? ''));
         $readingTimeMinutes = max(1, ceil($wordCount / 200)); // 200 kelime/dakika
-        
+
         return [
             'word_count' => $wordCount,
             'minutes' => $readingTimeMinutes,
@@ -153,13 +153,13 @@ class PostResource extends CustomResource
      */
     private function isLikedByUser(): bool
     {
-        if (!auth()->check()) {
+        if (!$this->isAuthenticated()) {
             return false;
         }
-        
+
         // Bu method'u Post model'inde implement etmeniz gerekiyor
-        return method_exists($this->resource, 'isLikedByUser') 
-            ? $this->resource->isLikedByUser(auth()->id()) 
+        return method_exists($this->resource, 'isLikedByUser')
+            ? $this->resource->isLikedByUser($this->getAuthUserId())
             : false;
     }
 
@@ -168,12 +168,12 @@ class PostResource extends CustomResource
      */
     private function isBookmarkedByUser(): bool
     {
-        if (!auth()->check()) {
+        if (!$this->isAuthenticated()) {
             return false;
         }
-        
-        return method_exists($this->resource, 'isBookmarkedByUser') 
-            ? $this->resource->isBookmarkedByUser(auth()->id()) 
+
+        return method_exists($this->resource, 'isBookmarkedByUser')
+            ? $this->resource->isBookmarkedByUser($this->getAuthUserId())
             : false;
     }
 
@@ -182,12 +182,12 @@ class PostResource extends CustomResource
      */
     private function getUserRating(): ?int
     {
-        if (!auth()->check()) {
+        if (!$this->isAuthenticated()) {
             return null;
         }
-        
-        return method_exists($this->resource, 'getUserRating') 
-            ? $this->resource->getUserRating(auth()->id()) 
+
+        return method_exists($this->resource, 'getUserRating')
+            ? $this->resource->getUserRating($this->getAuthUserId())
             : null;
     }
 
@@ -196,12 +196,12 @@ class PostResource extends CustomResource
      */
     private function canUserEdit(): bool
     {
-        if (!auth()->check()) {
+        if (!$this->isAuthenticated()) {
             return false;
         }
-        
-        return auth()->id() === $this->resource->user_id || 
-               (auth()->user()->can('edit', $this->resource) ?? false);
+
+        return $this->getAuthUserId() === $this->resource->user_id ||
+               ($this->getAuthUser() && method_exists($this->getAuthUser(), 'can') && $this->getAuthUser()->can('edit', $this->resource));
     }
 
     /**
@@ -209,12 +209,12 @@ class PostResource extends CustomResource
      */
     private function canUserDelete(): bool
     {
-        if (!auth()->check()) {
+        if (!$this->isAuthenticated()) {
             return false;
         }
-        
-        return auth()->id() === $this->resource->user_id || 
-               (auth()->user()->can('delete', $this->resource) ?? false);
+
+        return $this->getAuthUserId() === $this->resource->user_id ||
+               ($this->getAuthUser() && method_exists($this->getAuthUser(), 'can') && $this->getAuthUser()->can('delete', $this->resource));
     }
 
     /**
@@ -222,7 +222,7 @@ class PostResource extends CustomResource
      */
     private function isOwner(): bool
     {
-        return auth()->check() && auth()->id() === $this->resource->user_id;
+        return $this->isAuthenticated() && $this->getAuthUserId() === $this->resource->user_id;
     }
 
     /**

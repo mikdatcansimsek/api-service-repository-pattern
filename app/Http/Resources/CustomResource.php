@@ -4,17 +4,16 @@ namespace App\Http\Resources;
 
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
+use Illuminate\Support\Facades\Auth; // ← BU SATIRI EKLE
 
 /**
  * Custom Base Resource Class
- * 
+ *
  * Mevcut Laravel JsonResource'ının geliştirilmiş hali
  * Tutarlı API response'lar için özelleştirmeler içerir
  */
-abstract class CustomResource extends JsonResource
+class CustomResource extends JsonResource
 {
-    
-
     /**
      * Response'a meta data ekle
      */
@@ -93,7 +92,7 @@ abstract class CustomResource extends JsonResource
      */
     protected function whenAuth($value = null, $default = null)
     {
-        if (auth()->check()) {
+        if ($this->isAuthenticated()) {
             return $value ?? $this->resource;
         }
 
@@ -105,11 +104,35 @@ abstract class CustomResource extends JsonResource
      */
     protected function whenOwner($value = null, $default = null)
     {
-        if (auth()->check() && isset($this->resource->user_id) && auth()->id() === $this->resource->user_id) {
+        if ($this->isAuthenticated() && isset($this->resource->user_id) && $this->getAuthUserId() === $this->resource->user_id) {
             return $value ?? $this->resource;
         }
 
         return $default;
+    }
+
+    /**
+     * Kullanıcı giriş yapmış mı kontrol et
+     */
+    protected function isAuthenticated(): bool
+    {
+        return Auth::check();
+    }
+
+    /**
+     * Giriş yapmış kullanıcının ID'sini al
+     */
+    protected function getAuthUserId(): ?int
+    {
+        return Auth::id();
+    }
+
+    /**
+     * Giriş yapmış kullanıcıyı al
+     */
+    protected function getAuthUser()
+    {
+        return Auth::user();
     }
 
     /**
@@ -119,7 +142,7 @@ abstract class CustomResource extends JsonResource
     {
         return $this->whenLoaded($relationship, function () use ($resourceClass, $relationship) {
             $related = $this->resource->getRelation($relationship);
-            
+
             if (is_null($related)) {
                 return null;
             }
