@@ -10,7 +10,12 @@ use Illuminate\Http\JsonResponse;
 use App\Http\Requests\ProductStoreRequest;
 use App\Http\Requests\ProductUpdateRequest;
 use App\Models\Product;
+use App\Http\Resources\ProductCollection;
 use Illuminate\Http\Request;
+use App\Exceptions\ProductNotFoundException;
+use App\Exceptions\ValidationException;
+use App\Exceptions\UnauthorizedException;
+use App\Exceptions\ForbiddenException;
 
 class ProductController extends Controller
 {
@@ -47,7 +52,63 @@ class ProductController extends Controller
             $request->has('search') => $this->productService->searchProducts($request->search),
             default => $this->productService->getAllRecords(),
         };
-        return ProductResource::collection($products);
+        return ProductCollection::collection($products)
+            ->withFilters($this->getAppliedFilters($request))
+            ->withSorting($this->getAppliedSorting($request))
+            ->calculateProductStatistics()
+            ->withProductBulkOperations()
+            ->additional([
+                'request_info' => [
+                    'endpoint' => 'products.index',
+                    'method' => 'GET',
+                    'user_agent' => $request->userAgent(),
+                ]
+            ]);
+    }
+
+
+    /**
+     * Get applied filters from request
+     */
+    private function getAppliedFilters(Request $request): array
+    {
+        $filters = [];
+
+        if ($request->has('active')) {
+            $filters['status'] = $request->boolean('active') ? 'active' : 'inactive';
+        }
+
+        if ($request->has('available')) {
+            $filters['availability'] = $request->boolean('available') ? 'in_stock' : 'out_of_stock';
+        }
+
+        if ($request->has('category_id')) {
+            $filters['category'] = $request->category_id;
+        }
+
+        if ($request->has('search')) {
+            $filters['search'] = $request->search;
+        }
+
+        if ($request->has('price_min') || $request->has('price_max')) {
+            $filters['price_range'] = [
+                'min' => $request->price_min ?? 0,
+                'max' => $request->price_max ?? 999999,
+            ];
+        }
+
+        return $filters;
+    }
+
+    /**
+     * Get applied sorting from request
+     */
+    private function getAppliedSorting(Request $request): array
+    {
+        return [
+            'field' => $request->get('sort', 'created_at'),
+            'direction' => $request->get('order', 'desc'),
+        ];
     }
 
     /**

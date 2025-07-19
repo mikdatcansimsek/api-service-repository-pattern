@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Resources\PostResource;
 use App\Services\PostService;
 use Illuminate\Http\Request;
+use App\Http\Resources\PostCollection;
 
 class PostController extends Controller
 {
