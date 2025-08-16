@@ -7,6 +7,7 @@ use App\Http\Resources\PostResource;
 use App\Services\PostService;
 use Illuminate\Http\Request;
 use App\Http\Resources\PostCollection;
+use Illuminate\Support\Facades\Auth;
 
 class PostController extends Controller
 {
@@ -69,13 +70,26 @@ class PostController extends Controller
      */
     public function index(Request $request)
     {
+        // PERFORMANCE OPTIMIZATION: User interactions ile birlikte al
+        $userId = Auth::id();
+        
+        if ($request->has('page')) {
+            // Paginated response with user interactions
+            $posts = $this->postService->getPaginatedPostsWithUserInteractions(
+                $request->get('per_page', 15), 
+                $userId
+            );
+            return PostResource::collection($posts);
+        }
+
+        // Regular collection with user interactions
         $posts = match (true) {
             $request->has('published') => $this->postService->getPublishedPosts(),
             $request->has('category_id') => $this->postService->getPostsByCategory($request->category_id),
             $request->has('user_id') => $this->postService->getPostsByUser($request->user_id),
             $request->has('search') => $this->postService->searchPosts($request->search),
             $request->has('latest') => $this->postService->getLatestPosts($request->get('latest', 10)),
-            default => $this->postService->getAllRecords(),
+            default => $this->postService->getPostsWithUserInteractions($userId),
         };
 
         return PostResource::collection($posts);
@@ -133,7 +147,9 @@ class PostController extends Controller
      */
     public function show(int $id)
     {
-        $post = $this->postService->getRecordById($id);
+        // PERFORMANCE OPTIMIZATION: User interactions ile birlikte tek post al
+        $userId = Auth::id();
+        $post = $this->postService->getPostWithUserInteractions($id, $userId);
 
         return new PostResource($post);
     }

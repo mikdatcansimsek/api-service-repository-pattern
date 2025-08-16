@@ -8,14 +8,11 @@ use Illuminate\Database\Eloquent\Model;
 
 abstract class BaseRepository implements BaseRepositoryInterface
 {
-
-
     protected Model $model;
 
     public function __construct(Model $model)
     {
-        $this->model = $model;  // Model'i dependency injection ile alır
-
+        $this->model = $model;
     }
 
     public function getAll(): Collection
@@ -42,7 +39,7 @@ abstract class BaseRepository implements BaseRepositoryInterface
         }
 
         $record->update($data);
-        return $record->fresh();  // Güncel veriyi döndürür fresh() dbden güncel veriyi alır
+        return $record->fresh();
     }
 
     public function delete(int $id): bool
@@ -73,11 +70,41 @@ abstract class BaseRepository implements BaseRepositoryInterface
     }
 
     /**
+     * Toplam kayıt sayısını döndürür
+     */
+    public function count(): int
+    {
+        return $this->model->count();
+    }
+
+    /**
+     * Belirli kriterlere göre kayıt sayısını döndürür
+     */
+    public function countWhere(array $criteria): int
+    {
+        $query = $this->model->newQuery();
+
+        foreach ($criteria as $field => $value) {
+            $query->where($field, $value);
+        }
+
+        return $query->count();
+    }
+
+    /**
      * Model'i değiştir (dependency injection için)
      */
     public function setModel(Model $model): void
     {
         $this->model = $model;
+    }
+
+    /**
+     * Mevcut model instance'ını döndür
+     */
+    public function getModel(): Model
+    {
+        return $this->model;
     }
 
     /**

@@ -61,13 +61,14 @@ class CategoryResource extends CustomResource
             // Child categories (eğer yüklenmişse)
             'children' => $this->loadRelationship('children', CategoryResource::class),
 
-            // SEO bilgileri (eğer varsa)
+            // SEO bilgileri (eğer varsa) - ROUTE HATASI DÜZELTİLDİ
             'seo' => $this->when(
                 isset($this->resource->meta_title) || isset($this->resource->meta_description),
                 [
                     'meta_title' => $this->resource->meta_title ?? $this->resource->name,
                     'meta_description' => $this->resource->meta_description ?? $this->resource->description,
-                    'canonical_url' => route('categories.show', $this->resource->slug ?? $this->resource->id)
+                    // Web route yerine API route'u kullan veya null bırak
+                    'canonical_url' => null // veya request()->getSchemeAndHttpHost() . '/categories/' . ($this->resource->slug ?? $this->resource->id)
                 ]
             ),
 
@@ -78,11 +79,11 @@ class CategoryResource extends CustomResource
                 'created_by' => $this->resource->created_by ?? null,
             ]),
 
-            // API Links
+            // API Links - DOĞRU ROUTE ADLARI
             'links' => [
                 'self' => route('api.categories.show', $this->resource->id),
-                'products' => route('api.categories.products', $this->resource->id) ?? '#',
-                'posts' => route('api.categories.posts', $this->resource->id) ?? '#'
+                'products' => route('api.categories.products', $this->resource->id),
+                'posts' => route('api.categories.posts', $this->resource->id)
             ],
 
             // Timestamps (formatlanmış)

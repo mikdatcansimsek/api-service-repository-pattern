@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Product extends Model
 {
+    // soft delete silme işleminde kayıt silinmez sadece silinme tarihi kaydedilir
     use HasFactory, SoftDeletes;
 
     protected $fillable = [
@@ -23,13 +24,14 @@ class Product extends Model
 
 
     protected $casts = [
-        'price' => 'decimal:2',
+        'price' => 'decimal:2', // fiyatın virgülden sonra 2 basamak olmasını sağlar
         'is_active' => 'boolean',
+        'quantity' => 'integer', // Miktar integer olmalı
     ];
 
     public function category()
     {
-        return $this->belongsTo(Category::class);
+        return $this->belongsTo(Category::class); // bir ürünün bir kategorisi olabilir
     }
 
     public function scopeActive($query)

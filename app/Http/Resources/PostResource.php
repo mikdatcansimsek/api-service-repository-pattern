@@ -6,9 +6,7 @@ use Illuminate\Http\Request;
 
 class PostResource extends CustomResource
 {
-    /**
-     * Transform the resource into an array.
-     */
+    
     public function toArray(Request $request): array
     {
         return [
@@ -18,59 +16,46 @@ class PostResource extends CustomResource
             // Temel post bilgileri
             'title' => $this->resource->title,
             'slug' => $this->resource->slug,
+            'content' => $this->resource->content,
             'excerpt' => $this->resource->excerpt,
 
-            // İçerik (sadece yayınlanmış veya sahibi görür)
-            'content' => $this->when(
-                $this->resource->is_published || $this->isOwner(),
-                $this->resource->content
-            ),
-
-            // Yayın durumu
-            'publication_status' => [
+            // Post durumu
+            'status' => [
                 'is_published' => $this->resource->is_published,
                 'status_text' => $this->resource->is_published ? 'Yayında' : 'Taslak',
+                'color_class' => $this->resource->is_published ? 'success' : 'warning',
                 'published_at' => $this->when(
                     $this->resource->published_at,
                     $this->formatDate($this->resource->published_at)
-                ),
-                'color_class' => $this->resource->is_published ? 'success' : 'warning'
+                )
             ],
 
-            // Yazar bilgileri
-            'author' => $this->loadRelationship('user', UserResource::class),
+            // İstatistikler - Model'dan pre-calculated olarak geliyor
+            'statistics' => $this->resource->statistics,
+            
+            // Okuma süresi - Model'dan cache'li olarak geliyor
+            'reading_time' => $this->resource->reading_time,
 
-            // Kategori bilgileri
+            // Kategoriler ve etiketler
             'category' => $this->loadRelationship('category', CategoryResource::class),
-
-            // Etiketler (eğer varsa)
             'tags' => $this->when(
                 $this->resource->relationLoaded('tags'),
-                $this->resource->tags->pluck('name') ?? []
+                $this->resource->tags->pluck('name')
             ),
 
-            // İstatistikler
-            'statistics' => [
-                'view_count' => $this->resource->view_count ?? 0,
-                'like_count' => $this->resource->likes_count ?? 0,
-                'comment_count' => $this->resource->comments_count ?? 0,
-                'share_count' => $this->resource->shares_count ?? 0,
-                'reading_time' => $this->calculateReadingTime()
-            ],
+            // Yazar bilgileri - Sadece relation'dan
+            'author' => $this->loadRelationship('user', UserResource::class),
 
-            // Medya dosyaları (eğer varsa)
+            // Resimler ve medya
             'media' => [
-                'featured_image' => $this->resource->featured_image,
+                'featured_image' => $this->resource->featured_image ?? null,
                 'gallery' => $this->when(
-                    $this->resource->relationLoaded('media'),
-                    $this->resource->media->map(function ($media) {
-                        return [
-                            'id' => $media->id,
-                            'url' => $media->url,
-                            'type' => $media->type,
-                            'alt_text' => $media->alt_text,
-                        ];
-                    })
+                    isset($this->resource->gallery) && is_array($this->resource->gallery),
+                    $this->resource->gallery
+                ),
+                'attachments' => $this->when(
+                    $this->resource->relationLoaded('attachments'),
+                    $this->resource->attachments
                 )
             ],
 
@@ -79,18 +64,15 @@ class PostResource extends CustomResource
                 'meta_title' => $this->resource->meta_title ?? $this->resource->title,
                 'meta_description' => $this->resource->meta_description ?? $this->resource->excerpt,
                 'meta_keywords' => $this->resource->meta_keywords,
-                'canonical_url' => route('posts.show', $this->resource->slug ?? $this->resource->id),
+                'canonical_url' => null,
                 'og_image' => $this->resource->featured_image ?? null
             ],
 
-            // Kullanıcı etkileşimleri (giriş yapmış kullanıcılar için)
-            'user_interaction' => $this->whenAuth([
-                'is_liked' => $this->isLikedByUser(),
-                'is_bookmarked' => $this->isBookmarkedByUser(),
-                'user_rating' => $this->getUserRating(),
-                'can_edit' => $this->canUserEdit(),
-                'can_delete' => $this->canUserDelete()
-            ]),
+            // Kullanıcı etkileşimleri - Service'den pre-calculated olarak geliyor
+            'user_interaction' => $this->resource->user_interaction,
+
+            // Admin bilgileri - Model'dan pre-calculated olarak geliyor  
+            'admin_data' => $this->whenAuth($this->resource->admin_data),
 
             // Yazar verileri (sadece yazarın kendisi görür)
             'author_data' => $this->whenOwner([
@@ -105,28 +87,14 @@ class PostResource extends CustomResource
                 )
             ]),
 
-            // Admin bilgileri
-            'admin_data' => $this->whenAuth([
-                'is_featured' => $this->resource->is_featured ?? false,
-                'is_pinned' => $this->resource->is_pinned ?? false,
-                'moderation_status' => $this->resource->moderation_status ?? 'approved',
-                'admin_notes' => $this->resource->admin_notes
-            ]),
-
             // İlişkili postlar
             'related_posts' => $this->when(
                 $this->resource->relationLoaded('relatedPosts'),
-                PostResource::collection($this->resource->relatedPosts)->withoutMeta()
+                PostResource::collection($this->resource->relatedPosts)
             ),
 
-            // API Links
-            'links' => [
-                'self' => route('api.posts.show', $this->resource->id),
-                'author' => route('api.users.show', $this->resource->user_id),
-                'category' => route('api.categories.show', $this->resource->category_id),
-                'comments' => route('api.posts.comments', $this->resource->id) ?? '#',
-                'public_url' => route('posts.show', $this->resource->slug ?? $this->resource->id) ?? '#'
-            ],
+            // API Links - Route bağımlılığı azaltıldı
+            'links' => $this->getApiLinks(),
 
             // Timestamps (formatlanmış)
             ...$this->getTimestamps(),
@@ -134,95 +102,28 @@ class PostResource extends CustomResource
     }
 
     /**
-     * Okuma süresini hesapla
+     * API Links - Route bağımlılığını azalt
      */
-    private function calculateReadingTime(): array
+    private function getApiLinks(): array
     {
-        $wordCount = str_word_count(strip_tags($this->resource->content ?? ''));
-        $readingTimeMinutes = max(1, ceil($wordCount / 200)); // 200 kelime/dakika
-
-        return [
-            'word_count' => $wordCount,
-            'minutes' => $readingTimeMinutes,
-            'formatted' => $readingTimeMinutes . ' dk okuma'
-        ];
-    }
-
-    /**
-     * Kullanıcının bu postu beğenip beğenmediğini kontrol et
-     */
-    private function isLikedByUser(): bool
-    {
-        if (!$this->isAuthenticated()) {
-            return false;
+        try {
+            return [
+                'self' => route('api.posts.show', $this->resource->id),
+                'author' => route('api.users.show', $this->resource->user_id),
+                'category' => route('api.categories.show', $this->resource->category_id),
+                'comments' => route('api.posts.comments', $this->resource->id),
+                'public_url' => null
+            ];
+        } catch (\Exception $e) {
+            // Route'lar yoksa boş array döndür
+            return [
+                'self' => null,
+                'author' => null,
+                'category' => null,
+                'comments' => null,
+                'public_url' => null
+            ];
         }
-
-        // Bu method'u Post model'inde implement etmeniz gerekiyor
-        return method_exists($this->resource, 'isLikedByUser')
-            ? $this->resource->isLikedByUser($this->getAuthUserId())
-            : false;
-    }
-
-    /**
-     * Kullanıcının bu postu kaydetip kaydetmediğini kontrol et
-     */
-    private function isBookmarkedByUser(): bool
-    {
-        if (!$this->isAuthenticated()) {
-            return false;
-        }
-
-        return method_exists($this->resource, 'isBookmarkedByUser')
-            ? $this->resource->isBookmarkedByUser($this->getAuthUserId())
-            : false;
-    }
-
-    /**
-     * Kullanıcının bu post için verdiği rating
-     */
-    private function getUserRating(): ?int
-    {
-        if (!$this->isAuthenticated()) {
-            return null;
-        }
-
-        return method_exists($this->resource, 'getUserRating')
-            ? $this->resource->getUserRating($this->getAuthUserId())
-            : null;
-    }
-
-    /**
-     * Kullanıcı bu postu düzenleyebilir mi?
-     */
-    private function canUserEdit(): bool
-    {
-        if (!$this->isAuthenticated()) {
-            return false;
-        }
-
-        return $this->getAuthUserId() === $this->resource->user_id ||
-               ($this->getAuthUser() && method_exists($this->getAuthUser(), 'can') && $this->getAuthUser()->can('edit', $this->resource));
-    }
-
-    /**
-     * Kullanıcı bu postu silebilir mi?
-     */
-    private function canUserDelete(): bool
-    {
-        if (!$this->isAuthenticated()) {
-            return false;
-        }
-
-        return $this->getAuthUserId() === $this->resource->user_id ||
-               ($this->getAuthUser() && method_exists($this->getAuthUser(), 'can') && $this->getAuthUser()->can('delete', $this->resource));
-    }
-
-    /**
-     * Bu post'un sahibi mi kontrol et
-     */
-    private function isOwner(): bool
-    {
-        return $this->isAuthenticated() && $this->getAuthUserId() === $this->resource->user_id;
     }
 
     /**

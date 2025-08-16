@@ -88,8 +88,10 @@ abstract class CustomCollection extends ResourceCollection
             ];
         }
 
-        // Add performance metrics
-        $meta['performance'] = $this->getPerformanceMetrics();
+        // Add performance metrics (sadece debug modunda)
+        if (config('app.debug')) {
+            $meta['performance'] = $this->getPerformanceMetrics();
+        }
 
         // Merge additional meta
         $meta = array_merge($meta, $this->additionalMeta);

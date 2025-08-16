@@ -24,7 +24,7 @@ class UserResource extends CustomResource
 
             // Profil bilgileri
             'profile' => [
-                'avatar' => $this->resource->avatar_url ?? $this->getGravatarUrl(),
+                'avatar' => $this->resource->avatar_url ?? $this->resource->gravatar_url,
                 'bio' => $this->resource->bio ?? null,
                 'location' => $this->resource->location ?? null,
                 'website' => $this->resource->website ?? null,
@@ -39,7 +39,7 @@ class UserResource extends CustomResource
                     $this->resource->email_verified_at,
                     $this->formatDate($this->resource->email_verified_at)
                 ),
-                'status_text' => $this->getAccountStatusText()
+                'status_text' => $this->resource->account_status_text
             ],
 
             // Kullanıcı istatistikleri (eğer relation yüklenmişse)
@@ -84,7 +84,7 @@ class UserResource extends CustomResource
                     $this->resource->last_activity_at,
                     $this->formatDate($this->resource->last_activity_at)
                 ),
-                'is_online' => $this->isUserOnline(),
+                'is_online' => $this->resource->is_online,
                 'status' => $this->getUserActivityStatus()
             ],
 
@@ -101,46 +101,7 @@ class UserResource extends CustomResource
         ];
     }
 
-    /**
-     * Gravatar URL oluştur
-     */
-    private function getGravatarUrl(): string
-    {
-        $email = $this->resource->email ?? '';
-        $hash = md5(strtolower(trim($email)));
-        return "https://www.gravatar.com/avatar/{$hash}?d=identicon&s=150";
-    }
 
-    /**
-     * Hesap durumu metni
-     */
-    private function getAccountStatusText(): string
-    {
-        $isActive = $this->resource->is_active ?? true;
-        $isVerified = !is_null($this->resource->email_verified_at ?? null);
-
-        if (!$isActive) {
-            return 'Hesap Devre Dışı';
-        }
-
-        if (!$isVerified) {
-            return 'Email Doğrulanmamış';
-        }
-
-        return 'Aktif';
-    }
-
-    /**
-     * Kullanıcının online olup olmadığını kontrol et
-     */
-    private function isUserOnline(): bool
-    {
-        if (!isset($this->resource->last_activity_at) || !$this->resource->last_activity_at) {
-            return false;
-        }
-
-        return now()->diffInMinutes($this->resource->last_activity_at) < 5;
-    }
 
     /**
      * Kullanıcı aktivite durumu

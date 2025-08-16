@@ -13,10 +13,8 @@ class CategoryRepository extends BaseRepository implements CategoryRepositoryInt
         parent::__construct($model);
     }
 
-    public function findByWhere(array $criteria): Collection
-    {
-        return $this->model->where($criteria)->get();
-    }
+    // Bu method BaseRepository'den geliyor, tekrar yazılmasına gerek yok
+    // public function findWhere(array $criteria): Collection zaten mevcut
 
     public function getActiveCategories(): Collection
     {

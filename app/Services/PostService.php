@@ -6,6 +6,8 @@ use App\Abstracts\BaseService;
 use App\Repositories\Contracts\PostRepositoryInterface;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Str;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 
 class PostService extends BaseService
 {
@@ -213,5 +215,184 @@ class PostService extends BaseService
         if ($post->is_published) {
             throw new \Exception("Cannot delete published post. Unpublish it first.");
         }
+    }
+
+    /**
+     * PERFORMANCE OPTIMIZATION METHODS
+     * Bu methodlar Resource'lardaki ağır işlemleri buraya taşımak için eklendi
+     */
+
+    /**
+     * User interactions ile birlikte postları getir (N+1 problemini çözer)
+     */
+    public function getPostsWithUserInteractions(?int $userId = null): Collection
+    {
+        $userId = $userId ?? Auth::id();
+        
+        $posts = $this->repository->getAll()
+            ->load(['user', 'category', 'likes', 'bookmarks']);
+
+        if ($userId) {
+            // Bulk query ile user interactions'ı al
+            $this->attachUserInteractionsToPosts($posts, $userId);
+        }
+
+        return $posts;
+    }
+
+    /**
+     * Pagination ile user interactions
+     */
+    public function getPaginatedPostsWithUserInteractions(int $perPage = 15, ?int $userId = null)
+    {
+        $userId = $userId ?? Auth::id();
+        
+        $posts = $this->repository->paginate($perPage);
+        
+        if ($userId && $posts->count() > 0) {
+            $this->attachUserInteractionsToCollection($posts->getCollection(), $userId);
+        }
+
+        return $posts;
+    }
+
+    /**
+     * User interactions'ı bulk olarak attach et (Performance optimized)
+     */
+    private function attachUserInteractionsToPosts(Collection $posts, int $userId): void
+    {
+        if ($posts->isEmpty()) return;
+
+        $postIds = $posts->pluck('id')->toArray();
+
+        // Bulk queries - Sadece 3 sorgu ile tüm user interactions
+        $likes = DB::table('likes')
+            ->whereIn('post_id', $postIds)
+            ->where('user_id', $userId)
+            ->pluck('post_id')
+            ->toArray();
+
+        $bookmarks = DB::table('bookmarks')
+            ->whereIn('post_id', $postIds)
+            ->where('user_id', $userId)
+            ->pluck('post_id')
+            ->toArray();
+
+        $ratings = DB::table('ratings')
+            ->whereIn('post_id', $postIds)
+            ->where('user_id', $userId)
+            ->pluck('rating', 'post_id')
+            ->toArray();
+
+        // Authorization checks - bulk olarak
+        $userCanEdit = [];
+        $userCanDelete = [];
+        
+        foreach ($posts as $post) {
+            $canEdit = ($post->user_id === $userId) || 
+                      ($this->userHasPermission($userId, 'edit', $post));
+            $canDelete = ($post->user_id === $userId) || 
+                        ($this->userHasPermission($userId, 'delete', $post));
+            
+            $userCanEdit[$post->id] = $canEdit;
+            $userCanDelete[$post->id] = $canDelete;
+
+            // User interaction data'yı post'a attach et
+            $post->user_interaction_data = [
+                'is_liked' => in_array($post->id, $likes),
+                'is_bookmarked' => in_array($post->id, $bookmarks),
+                'user_rating' => $ratings[$post->id] ?? null,
+                'can_edit' => $canEdit,
+                'can_delete' => $canDelete
+            ];
+        }
+    }
+
+    /**
+     * Collection için user interactions attach et
+     */
+    private function attachUserInteractionsToCollection($collection, int $userId): void
+    {
+        if ($collection instanceof Collection) {
+            $this->attachUserInteractionsToPosts($collection, $userId);
+        }
+    }
+
+    /**
+     * User permission check - authorization logic buraya taşındı
+     */
+    private function userHasPermission(int $userId, string $permission, $post): bool
+    {
+        $user = Auth::user();
+        
+        if (!$user || $user->id !== $userId) {
+            return false;
+        }
+
+        // Laravel Policy veya basit role check
+        if (method_exists($user, 'can')) {
+            return $user->can($permission, $post);
+        }
+
+        // Basit role check (admin gibi)
+        if (method_exists($user, 'hasRole')) {
+            return $user->hasRole('admin') || $user->hasRole('editor');
+        }
+
+        return false;
+    }
+
+    /**
+     * Tek post için user interactions
+     */
+    public function getPostWithUserInteractions(int $postId, ?int $userId = null): ?object
+    {
+        $post = $this->getRecordById($postId);
+        
+        if (!$post) {
+            return null;
+        }
+
+        $post->load(['user', 'category', 'likes', 'bookmarks']);
+
+        if ($userId) {
+            $this->attachUserInteractionsToSinglePost($post, $userId);
+        }
+
+        return $post;
+    }
+
+    /**
+     * Tek post için user interaction attach
+     */
+    private function attachUserInteractionsToSinglePost($post, int $userId): void
+    {
+        $isLiked = DB::table('likes')
+            ->where('post_id', $post->id)
+            ->where('user_id', $userId)
+            ->exists();
+
+        $isBookmarked = DB::table('bookmarks')
+            ->where('post_id', $post->id)
+            ->where('user_id', $userId)
+            ->exists();
+
+        $userRating = DB::table('ratings')
+            ->where('post_id', $post->id)
+            ->where('user_id', $userId)
+            ->value('rating');
+
+        $canEdit = ($post->user_id === $userId) || 
+                   ($this->userHasPermission($userId, 'edit', $post));
+        $canDelete = ($post->user_id === $userId) || 
+                     ($this->userHasPermission($userId, 'delete', $post));
+
+        $post->user_interaction_data = [
+            'is_liked' => $isLiked,
+            'is_bookmarked' => $isBookmarked,
+            'user_rating' => $userRating,
+            'can_edit' => $canEdit,
+            'can_delete' => $canDelete
+        ];
     }
 }

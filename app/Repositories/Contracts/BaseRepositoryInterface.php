@@ -35,6 +35,25 @@ interface BaseRepositoryInterface
     /**
      * Find records by a set of criteria.
      */
-    
+    public function findWhere(array $criteria): Collection;
+
+    /**
+     * Paginate records.
+     */
     public function paginate(int $perPage = 15);
+
+    /**
+     * Count total records.
+     */
+    public function count(): int;
+
+    /**
+     * Count records by criteria.
+     */
+    public function countWhere(array $criteria): int;
+
+    /**
+     * Get the model instance.
+     */
+    public function getModel(): Model;
 }

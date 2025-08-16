@@ -55,7 +55,6 @@ class ProductController extends Controller
         return ProductCollection::collection($products)
             ->withFilters($this->getAppliedFilters($request))
             ->withSorting($this->getAppliedSorting($request))
-            ->calculateProductStatistics()
             ->withProductBulkOperations()
             ->additional([
                 'request_info' => [

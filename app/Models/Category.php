@@ -32,6 +32,7 @@ class Category extends Model
     }
 
     // Scope'lar
+    // sadece aktif kategorileri getir
     public function scopeActive($query)
     {
         return $query->where('is_active', true);
